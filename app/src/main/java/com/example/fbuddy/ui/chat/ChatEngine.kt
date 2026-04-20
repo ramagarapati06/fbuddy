@@ -31,12 +31,12 @@ class ChatEngine(
 
     suspend fun answer(message: String): String {
         val trimmed = message.trim()
-        if (trimmed.isBlank()) return "Ask me something about your spending!"
+        if (trimmed.isBlank()) return "Hey! Ask me anything about your spending - I'm here to help! 😊"
 
         val context = buildFinancialContext()
 
         if (context == null) {
-            return "No transactions found yet. Go to Settings → Re-scan SMS Inbox first!"
+            return "Hmm, looks like you haven't added any transactions yet. Head to Settings → Re-scan SMS Inbox to get started! 📱"
         }
 
         if (GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE") {
@@ -51,7 +51,7 @@ class ChatEngine(
             geminiResponse ?: localAnswer(trimmed.lowercase(Locale.getDefault()), context)
         } catch (e: Exception) {
             Log.e(TAG, "Gemini failed: ${e.message}", e)
-            "Could not reach Gemini. Here's a local answer:\n\n" +
+            "Oops, I'm having trouble connecting right now. But here's what I can tell you:\n\n" +
                     localAnswer(trimmed.lowercase(Locale.getDefault()), context)
         }
     }
@@ -82,37 +82,37 @@ class ChatEngine(
                 .groupBy { it.category.displayName }
                 .mapValues { (_, list) -> list.sumOf { it.amount } }
                 .entries.sortedByDescending { it.value }
-                .joinToString("\n") { "  * ${it.key}: Rs.${"%.2f".format(it.value)}" }
+                .joinToString("\n") { "  * ${it.key}: ₹${"%.0f".format(it.value)}" }
 
             val topMerchants = last30Txns
                 .filter { it.type == TransactionType.DEBIT && !it.merchant.isNullOrBlank() }
                 .groupBy { it.merchant!!.trim() }
                 .mapValues { (_, list) -> list.sumOf { it.amount } }
                 .entries.sortedByDescending { it.value }.take(6)
-                .joinToString("\n") { "  * ${it.key}: Rs.${"%.2f".format(it.value)}" }
+                .joinToString("\n") { "  * ${it.key}: ₹${"%.0f".format(it.value)}" }
 
             val recentList = last30Txns.take(8).joinToString("\n") { txn ->
                 val sign = if (txn.type == TransactionType.DEBIT) "-" else "+"
-                "  ${txn.merchant ?: txn.category.displayName}: ${sign}Rs.${"%.2f".format(txn.amount)} (${txn.category.displayName})"
+                "  ${txn.merchant ?: txn.category.displayName}: ${sign}₹${"%.0f".format(txn.amount)} (${txn.category.displayName})"
             }
 
             """
-FINANCIAL SUMMARY:
-Today spent: Rs.${"%.2f".format(todayDebit)}
-This month spent: Rs.${"%.2f".format(monthDebit)}
-This month received: Rs.${"%.2f".format(monthCredit)}
-Last 7 days: Rs.${"%.2f".format(last7Debit)} | Daily avg: Rs.${"%.2f".format(dailyAvg)}
+FINANCIAL DATA:
+Today's spending: ₹${"%.0f".format(todayDebit)}
+This month spent: ₹${"%.0f".format(monthDebit)}
+This month received: ₹${"%.0f".format(monthCredit)}
+Last 7 days: ₹${"%.0f".format(last7Debit)} | Daily average: ₹${"%.0f".format(dailyAvg)}
 
-CATEGORY BREAKDOWN (this month):
+SPENDING BY CATEGORY (this month):
 $categoryBreakdown
 
-TOP MERCHANTS (last 30 days):
+TOP PLACES THEY SHOP (last 30 days):
 $topMerchants
 
 RECENT TRANSACTIONS:
 $recentList
 
-TOTAL TRANSACTIONS: ${last30Txns.size}
+Total transactions in last 30 days: ${last30Txns.size}
             """.trimIndent()
 
         } catch (e: Exception) {
@@ -123,13 +123,25 @@ TOTAL TRANSACTIONS: ${last30Txns.size}
 
     private fun callGemini(userMessage: String, financialContext: String): String? {
         val fullPrompt = """
-You are F-Buddy, a friendly personal finance assistant for an Indian user.
-You have their REAL transaction data below. Give specific, helpful, actionable answers.
-Use Rs. for amounts. Keep responses under 200 words. Reference their actual numbers.
+You are F-Buddy, a friendly and helpful personal finance buddy for an Indian user. Think of yourself as their financially savvy friend who looks at their actual spending data and gives practical, caring advice.
 
+PERSONALITY GUIDELINES:
+- Be warm, conversational, and encouraging - like texting a friend
+- Use casual language and emojis occasionally (but don't overdo it)
+- Celebrate wins ("Nice! You're doing great!") and be supportive about challenges
+- Give SPECIFIC numbers from their actual data - never be vague
+- Keep responses natural and under 150 words
+- Use "₹" for rupees, not "Rs."
+- When giving advice, make it actionable and relevant to their actual spending
+- Avoid corporate jargon - talk like a real person
+- If they're overspending, be honest but kind, not preachy
+
+THEIR ACTUAL FINANCIAL DATA:
 $financialContext
 
-User asks: $userMessage
+USER'S QUESTION: $userMessage
+
+Remember: Reference their REAL numbers and patterns. Make them feel like you actually looked at their data, because you did!
         """.trimIndent()
 
         Log.d(TAG, "Calling Gemini API with key: ${GEMINI_API_KEY.take(8)}...")
@@ -144,8 +156,10 @@ User asks: $userMessage
                 })
             })
             put("generationConfig", JSONObject().apply {
-                put("temperature", 0.8)
-                put("maxOutputTokens", 400)
+                put("temperature", 0.9)  // Increased for more natural variety
+                put("maxOutputTokens", 300)
+                put("topP", 0.95)
+                put("topK", 40)
             })
         }
 
@@ -196,68 +210,108 @@ User asks: $userMessage
             normalized.contains("top") || normalized.contains("merchant") -> topMerchants(now)
             normalized.contains("categor")                                 -> categoryBreakdown(now)
             normalized.contains("tip") || normalized.contains("save")     -> savingsTip(now)
-            else -> "Ask me about: today / this week / this month spending, top merchants, categories, or saving tips!"
+            else -> "I can help you with:\n\n💰 Today's spending\n📊 This week/month's stats\n🏪 Top merchants\n📈 Spending by category\n💡 Savings tips\n\nWhat would you like to know?"
         }
     }
 
     private suspend fun todaySpend(now: Long): String {
         val txns   = repository.getTransactionsInRange(DateUtils.startOfDayMillis(now), now).first()
         val debits = txns.filter { it.type == TransactionType.DEBIT }
-        return "You've spent Rs.${"%.2f".format(debits.sumOf { it.amount })} today across ${debits.size} transaction(s)."
+        val total = debits.sumOf { it.amount }
+
+        return when {
+            debits.isEmpty() -> "You haven't spent anything today yet! 🎉 Starting the day strong!"
+            total < 200 -> "You've spent ₹${"%.0f".format(total)} today across ${debits.size} transaction(s). Pretty light! 😊"
+            total < 1000 -> "Today's spending is ₹${"%.0f".format(total)} across ${debits.size} transaction(s). Looking good!"
+            else -> "You've spent ₹${"%.0f".format(total)} today (${debits.size} transactions). That's a bit high - maybe ease up a bit? 😅"
+        }
     }
 
     private suspend fun yesterdaySpend(now: Long): String {
         val end   = DateUtils.startOfDayMillis(now) - 1
         val start = DateUtils.startOfDaysAgoMillis(1, now)
         val txns  = repository.getTransactionsInRange(start, end).first()
-        return "You spent Rs.${"%.2f".format(txns.filter { it.type == TransactionType.DEBIT }.sumOf { it.amount })} yesterday."
+        val total = txns.filter { it.type == TransactionType.DEBIT }.sumOf { it.amount }
+
+        return if (total == 0.0) {
+            "You didn't spend anything yesterday! Either that's impressive restraint or you forgot to scan your messages 😄"
+        } else {
+            "Yesterday you spent ₹${"%.0f".format(total)}. ${if (total > 1000) "That was a busy day!" else "Not bad!"}"
+        }
     }
 
     private suspend fun weekSpend(now: Long): String {
         val txns  = repository.getTransactionsInRange(DateUtils.startOfDaysAgoMillis(7, now), now).first()
         val total = txns.filter { it.type == TransactionType.DEBIT }.sumOf { it.amount }
-        return "Last 7 days: Rs.${"%.2f".format(total)} spent. Daily average: Rs.${"%.2f".format(total / 7)}."
+        val daily = total / 7
+
+        return "In the last 7 days, you've spent ₹${"%.0f".format(total)}.\n\nThat's about ₹${"%.0f".format(daily)}/day on average. ${
+            when {
+                daily < 300 -> "Super disciplined! 💪"
+                daily < 800 -> "Pretty reasonable pace!"
+                else -> "Running a bit hot - maybe dial it back? 🔥"
+            }
+        }"
     }
 
     private suspend fun monthSpend(now: Long): String {
         val txns   = repository.getTransactionsInRange(DateUtils.startOfMonthMillis(now), now).first()
         val spent  = txns.filter { it.type == TransactionType.DEBIT  }.sumOf { it.amount }
         val earned = txns.filter { it.type == TransactionType.CREDIT }.sumOf { it.amount }
-        return "This month: Rs.${"%.2f".format(spent)} spent, Rs.${"%.2f".format(earned)} received."
+
+        return "This month so far:\n💸 Spent: ₹${"%.0f".format(spent)}\n💰 Received: ₹${"%.0f".format(earned)}\n\n${
+            if (earned > spent) "You're in the green! Nice work! 🎉"
+            else if (spent > earned * 0.8) "Getting close to what you earned - watch out!"
+            else "You're doing alright, keep it up!"
+        }"
     }
 
     private suspend fun topMerchants(now: Long): String {
         val txns = repository.getTransactionsInRange(DateUtils.startOfDaysAgoMillis(30, now), now).first()
             .filter { it.type == TransactionType.DEBIT && !it.merchant.isNullOrBlank() }
-        if (txns.isEmpty()) return "No merchant data in the last 30 days."
+        if (txns.isEmpty()) return "No merchant data yet. Once you scan some SMS, I'll show you where your money's going! 📊"
+
         val lines = txns.groupBy { it.merchant!!.trim() }
             .mapValues { (_, l) -> l.sumOf { it.amount } }
             .entries.sortedByDescending { it.value }.take(5)
-            .mapIndexed { i, e -> "${i + 1}. ${e.key} — Rs.${"%.2f".format(e.value)}" }
-        return "Top merchants (last 30 days):\n${lines.joinToString("\n")}"
+            .mapIndexed { i, e -> "${i + 1}. ${e.key} — ₹${"%.0f".format(e.value)}" }
+
+        return "Your top 5 hangout spots (last 30 days):\n\n${lines.joinToString("\n")}\n\n${
+            if (lines.size >= 3) "Looks like you have some favorites! 😄" else ""
+        }"
     }
 
     private suspend fun categoryBreakdown(now: Long): String {
         val txns  = repository.getTransactionsInRange(DateUtils.startOfMonthMillis(now), now).first()
             .filter { it.type == TransactionType.DEBIT }
-        if (txns.isEmpty()) return "No spending this month yet."
+        if (txns.isEmpty()) return "You haven't spent anything this month yet! Fresh start! 🌟"
+
         val total = txns.sumOf { it.amount }
         val lines = txns.groupBy { it.category.displayName }
             .mapValues { (_, l) -> l.sumOf { it.amount } }
             .entries.sortedByDescending { it.value }
-            .map { "* ${it.key}: Rs.${"%.2f".format(it.value)} (${"%.0f".format(it.value / total * 100)}%)" }
-        return "This month by category:\n${lines.joinToString("\n")}"
+            .take(5)
+            .map { "${it.key}: ₹${"%.0f".format(it.value)} (${"%.0f".format(it.value / total * 100)}%)" }
+
+        val topCategory = lines.firstOrNull()?.substringBefore(":")
+        return "Here's where your money went this month:\n\n${lines.joinToString("\n")}\n\n${
+            topCategory?.let { "Wow, $it is taking the lead! 🏆" } ?: ""
+        }"
     }
 
     private suspend fun savingsTip(now: Long): String {
         val txns = repository.getTransactionsInRange(DateUtils.startOfMonthMillis(now), now).first()
             .filter { it.type == TransactionType.DEBIT }
-        if (txns.isEmpty()) return "Add some transactions first for personalised tips!"
+        if (txns.isEmpty()) return "Start tracking your spending, and I'll give you personalized tips! 💡"
+
         val top   = txns.groupBy { it.category.displayName }
             .mapValues { (_, l) -> l.sumOf { it.amount } }.maxByOrNull { it.value }
-            ?: return "Keep tracking your expenses!"
+            ?: return "Keep tracking - you're building good habits! 💪"
+
         val total = txns.sumOf { it.amount }
         val pct   = (top.value / total * 100).toInt()
-        return "Your biggest spend is ${top.key} at Rs.${"%.2f".format(top.value)} ($pct% of total). Try setting a monthly limit for this category!"
+
+        return "💡 Your biggest expense is ${top.key} at ₹${"%.0f".format(top.value)} (that's $pct% of your spending!).\n\n" +
+                "Try this: Set a monthly cap for ${top.key}. Even cutting it by 20% would save you ₹${"%.0f".format(top.value * 0.2)}! 🎯"
     }
 }

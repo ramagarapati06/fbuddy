@@ -38,6 +38,7 @@ import com.example.fbuddy.ui.chat.ChatScreen
 import com.example.fbuddy.ui.home.HomeScreen
 import com.example.fbuddy.ui.onboarding.OnboardingScreen
 import com.example.fbuddy.ui.scan.ScanScreen
+import com.example.fbuddy.ui.settings.EditProfileScreen
 import com.example.fbuddy.ui.settings.SettingsScreen
 import com.example.fbuddy.ui.theme.*
 import com.example.fbuddy.ui.transactions.TransactionsScreen
@@ -183,10 +184,28 @@ fun MainScaffold(onRescan: () -> Unit) {
                 HomeScreen(onChatClick = { navController.navigate("chat") })
             }
             composable("transactions") { TransactionsScreen() }
-            composable("scan")         { ScanScreen() }
+            composable("scan") {
+                ScanScreen(
+                    onBackClick = { navController.navigateUp() }
+                )
+            }
             composable("analytics")    { AnalyticsScreen() }
-            composable("settings")     { SettingsScreen(onRescan = onRescan) }
-            composable("chat")         { ChatScreen() }
+            composable("settings") {
+                SettingsScreen(
+                    onRescan = onRescan,
+                    onEditProfile = { navController.navigate("edit_profile") }
+                )
+            }
+            composable("edit_profile") {
+                EditProfileScreen(
+                    onBackClick = { navController.navigateUp() }
+                )
+            }
+            composable("chat") {
+                ChatScreen(
+                    onBackClick = { navController.navigateUp() }
+                )
+            }
         }
     }
 }

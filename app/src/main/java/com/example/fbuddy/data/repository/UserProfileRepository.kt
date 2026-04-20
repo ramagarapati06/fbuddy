@@ -46,6 +46,6 @@ class UserProfileRepository(context: Context) {
     suspend fun getDailyBudget(): Int {
         val p = getProfile() ?: return 0
         return if (p.monthlyBudget > 0) p.monthlyBudget / 30
-               else getDisposableIncome() / 30
+        else getDisposableIncome() / 30
     }
 }

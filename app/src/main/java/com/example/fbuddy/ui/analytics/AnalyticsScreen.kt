@@ -3,6 +3,8 @@ package com.example.fbuddy.ui.analytics
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -11,61 +13,84 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fbuddy.data.model.Category
+import com.example.fbuddy.ui.theme.*
 import com.github.mikephil.charting.charts.BarChart
 import com.github.mikephil.charting.charts.PieChart
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.*
 import com.github.mikephil.charting.formatter.IndexAxisValueFormatter
 
+@OptIn(ExperimentalMaterial3Api::class)  // ✅ FIXED
 @Composable
 fun AnalyticsScreen(
-    modifier: Modifier = Modifier,
+    onBackClick: () -> Unit = {},
     viewModel: AnalyticsViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    if (state.isLoading) {
-        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
-        return
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-
-        // Month comparison card
-        MonthComparisonCard(
-            thisMonth = state.thisMonthTotal,
-            lastMonth = state.lastMonthTotal
-        )
-
-        // Pie chart – spending by category this month
-        if (state.categoryTotalsMonth.isNotEmpty()) {
-            CategoryPieChartCard(categoryTotals = state.categoryTotalsMonth)
-        }
-
-        // Bar chart – daily spend last 30 days
-        if (state.dailyTotals30Days.isNotEmpty()) {
-            DailyBarChartCard(dailyTotals = state.dailyTotals30Days)
-        }
-
-        // Line/Bar chart – monthly totals last 6 months
-        if (state.monthlyTotals6Months.isNotEmpty()) {
-            MonthlyBarChartCard(monthlyBars = state.monthlyTotals6Months)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Analytics") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = BgSand
+                )
+            )
+        },
+        containerColor = BgSand
+    ) { paddingValues ->
+        if (state.isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Teal)
+            }
+            return@Scaffold
         }
 
-        // Top merchants
-        if (state.topMerchants.isNotEmpty()) {
-            TopMerchantsCard(merchants = state.topMerchants)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(paddingValues)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            MonthComparisonCard(
+                thisMonth = state.thisMonthTotal,
+                lastMonth = state.lastMonthTotal
+            )
+
+            if (state.categoryTotalsMonth.isNotEmpty()) {
+                CategoryPieChartCard(categoryTotals = state.categoryTotalsMonth)
+            }
+
+            if (state.dailyTotals30Days.isNotEmpty()) {
+                DailyBarChartCard(dailyTotals = state.dailyTotals30Days)
+            }
+
+            if (state.monthlyTotals6Months.isNotEmpty()) {
+                MonthlyBarChartCard(monthlyBars = state.monthlyTotals6Months)
+            }
+
+            if (state.topMerchants.isNotEmpty()) {
+                TopMerchantsCard(merchants = state.topMerchants)
+            }
         }
     }
 }
@@ -146,7 +171,6 @@ private fun CategoryPieChartCard(categoryTotals: Map<Category, Double>) {
                 }
             )
 
-            // Legend list below chart
             Spacer(Modifier.height(8.dp))
             categoryTotals.entries.sortedByDescending { it.value }.forEach { (cat, amount) ->
                 Row(
@@ -198,7 +222,6 @@ private fun DailyBarChartCard(dailyTotals: List<Double>) {
                     val entries = dailyTotals.mapIndexed { i, v ->
                         BarEntry(i.toFloat(), v.toFloat())
                     }
-                    // Label every 5th day
                     val labels = (0 until dailyTotals.size).map { i ->
                         if (i % 5 == 0) "D-${dailyTotals.size - 1 - i}" else ""
                     }

@@ -145,7 +145,7 @@ private fun Step2Income(
         subtitle = "This helps us understand your spending capacity.",
         onNext   = { onNext(data.copy(monthlySalary = salary, salaryFrequency = frequency)) },
         onBack   = onBack,
-        nextEnabled = salary.isNotBlank()
+        nextEnabled = salary.isNotBlank() && (salary.toIntOrNull() ?: 0) > 0
     ) {
         ObLabel("TAKE-HOME SALARY")
         ObTextField(value = salary, onValueChange = { salary = it },
@@ -218,13 +218,16 @@ private fun Step3FixedExpenses(
     val total = listOf(rent, emi, subs, utils)
         .sumOf { it.toIntOrNull() ?: 0 }
 
+    val salary = data.monthlySalary.toIntOrNull() ?: 0
+    val isValid = total < salary
+
     StepScaffold(
         emoji    = "🏠",
         title    = "Fixed monthly expenses",
         subtitle = "Things that don't change month to month.",
         onNext   = { onNext(data.copy(rent = rent, emiLoans = emi, subscriptions = subs, utilities = utils)) },
         onBack   = onBack,
-        nextEnabled = true
+        nextEnabled = isValid
     ) {
         ObLabel("RENT / PG")
         ObTextField(rent, { rent = it }, "e.g. 12000", "₹", keyboardType = KeyboardType.Number)
@@ -244,14 +247,15 @@ private fun Step3FixedExpenses(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(TealLight)
+                    .background(if (isValid) TealLight else RoseLight)
                     .padding(12.dp)
             ) {
                 Text(
-                    "Total fixed: ₹%,d/mo".format(total),
+                    if (isValid) "Total fixed: ₹%,d/mo".format(total)
+                    else "⚠️ Fixed expenses (₹%,d) exceed your income (₹%,d)!".format(total, salary),
                     fontSize   = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color      = Teal
+                    color      = if (isValid) Teal else Rose
                 )
             }
         }
@@ -270,13 +274,16 @@ private fun Step4Savings(
 
     val feasibility = checkFeasibility(data.copy(savingsGoal = goal))
 
+    // Block progression if savings goal is not feasible (Bad result)
+    val canProceed = goal.isNotBlank() && feasibility !is FeasibilityResult.Bad
+
     StepScaffold(
         emoji    = "🎯",
         title    = "How much do you want to save?",
         subtitle = "We'll check if this is realistic based on your income.",
         onNext   = { onNext(data.copy(savingsGoal = goal, savingsPurpose = purpose)) },
         onBack   = onBack,
-        nextEnabled = goal.isNotBlank()
+        nextEnabled = canProceed  // CHANGED: Block if feasibility check fails
     ) {
         ObLabel("MONTHLY SAVINGS GOAL")
         ObTextField(goal, { goal = it }, "e.g. 10000", "₹", keyboardType = KeyboardType.Number)
@@ -301,7 +308,7 @@ private fun Step4Savings(
                         fontWeight = FontWeight.SemiBold)
                     if (result is FeasibilityResult.Warn || result is FeasibilityResult.Bad) {
                         val suggestion = if (result is FeasibilityResult.Warn) result.suggestion
-                                         else (result as FeasibilityResult.Bad).suggestion
+                        else (result as FeasibilityResult.Bad).suggestion
                         Text(suggestion, fontSize = 11.sp, color = textColor,
                             modifier = Modifier.padding(top = 4.dp))
                     }

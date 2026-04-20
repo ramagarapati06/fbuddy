@@ -31,4 +31,3 @@ class Converters {
     fun toSource(value: String?): TransactionSource? =
         value?.let { TransactionSource.valueOf(it) }
 }
-
