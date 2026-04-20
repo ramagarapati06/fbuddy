@@ -1,5 +1,5 @@
 package com.example.fbuddy
-//test commit
+//
 
 import android.Manifest
 import android.content.pm.PackageManager
